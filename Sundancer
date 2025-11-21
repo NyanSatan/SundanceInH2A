@@ -668,6 +668,10 @@ def main():
         print("iPhone 3GS 6.0 (10A403) IPSW does NOT exist")
         exit(-1)
 
+    if not args.kernel.exists():
+        print("kernelcache does NOT exist")
+        exit(-1)
+
     if args.output.exists():
         print("output path already exists")
         exit(-1)
