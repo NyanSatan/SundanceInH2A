@@ -132,7 +132,7 @@ def image3_decrypt(src: Path, dest: Path, iv: str, key: str, keep_cont: bool = F
         args += ["-decrypt"]
 
     _run(
-        SCRIPT_ROOT / "executables" / "xpwntool",
+        EXECUTABLES["xpwntool"],
         args
     )
 
@@ -140,7 +140,7 @@ def image3_decrypt(src: Path, dest: Path, iv: str, key: str, keep_cont: bool = F
 
 def image3_create(src: Path, dest: Path, template: Path):
     _run(
-        SCRIPT_ROOT / "executables" / "xpwntool",
+        EXECUTABLES["xpwntool"],
         [str(src), str(dest), "-t", str(template)]
     )
 
@@ -148,7 +148,7 @@ def image3_create(src: Path, dest: Path, template: Path):
 
 def dmg_extract(src: Path, dest: Path, key: str):
     _run(
-        SCRIPT_ROOT / "executables" / "dmg",
+        EXECUTABLES["dmg"],
         ["extract", str(src), str(dest), "-k", key]
     )
 
@@ -156,7 +156,7 @@ def dmg_extract(src: Path, dest: Path, key: str):
 
 def dmg_build(src: Path, dest: Path):
     _run(
-        SCRIPT_ROOT / "executables" / "dmg",
+        EXECUTABLES["dmg"],
         ["build", str(src), str(dest)]
     )
 
@@ -164,7 +164,7 @@ def dmg_build(src: Path, dest: Path):
 
 def hfsplus_grow(dmg: Path, size: int):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "grow", str(size)]
     )
 
@@ -172,7 +172,7 @@ def hfsplus_grow(dmg: Path, size: int):
 
 def hfsplus_extract(dmg: Path, src: str, dest: Path):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "extract", src, str(dest)]
     )
 
@@ -180,7 +180,7 @@ def hfsplus_extract(dmg: Path, src: str, dest: Path):
 
 def hfsplus_replace(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0, mode: int = 0o644):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "rm", dest]
     )
 
@@ -188,17 +188,17 @@ def hfsplus_replace(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0,
 
 def hfsplus_add(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0, mode: int = 0o644):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "add", str(src), dest]
     )
 
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "chown", "%d:%d" % (uid, gid), dest]
     )
 
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "chmod", "%o" % (mode), dest]
     )
 
@@ -206,7 +206,7 @@ def hfsplus_add(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0, mod
 
 def hfsplus_rm(dmg: Path, path: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "rm", path]
     )
 
@@ -214,7 +214,7 @@ def hfsplus_rm(dmg: Path, path: str):
 
 def hfsplus_rmdir(dmg: Path, dir: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "rmall", dir]
     )
 
@@ -222,7 +222,7 @@ def hfsplus_rmdir(dmg: Path, dir: str):
 
 def hfsplus_mv(dmg: Path, src: str, dest: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "mv", src, dest]
     )
 
@@ -230,7 +230,7 @@ def hfsplus_mv(dmg: Path, src: str, dest: str):
 
 def hfsplus_untar(dmg: Path, tar: Path, dest: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        EXECUTABLES["hfsplus"],
         [str(dmg), "untar", str(tar), dest]
     )
 
@@ -632,10 +632,17 @@ def process(args):
             args.output
         )
 
+def find_execs(exec_names):
+    for exec_bin in exec_names:
+        sys_path = shutil.which(exec_bin)
+        EXECUTABLES[exec_bin] = Path(sys_path) if sys_path else EXECUTABLES_ROOT / exec_bin
+
 SCRIPT_ROOT = Path(__file__).parent
+EXECUTABLES_ROOT = SCRIPT_ROOT / "executables"
 RESOURCES_ROOT = Path(__file__).parent / "resources"
 DEFAULT_KERNEL = SCRIPT_ROOT / "artifacts" / "kernelcache.n18ap.bin"
 DEFAULT_DEVICE_TREE = SCRIPT_ROOT / "artifacts" / "DeviceTree.n18ap.bin"
+EXECUTABLES = {}
 
 def main():
     parser = argparse.ArgumentParser(description="convert iPod touch 3 iOS 5.1.1 IPSW to iOS 6.0")
@@ -676,6 +683,7 @@ def main():
         print("output path already exists")
         exit(-1)
 
+    find_execs(["dmg", "hfsplus", "xpwntool"])
     process(args)
 
     log("DONE!")
