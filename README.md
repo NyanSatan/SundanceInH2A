@@ -12,6 +12,9 @@ This repository contains tools and instructions to *convert* iPhone 3GS iOS 6.0 
 
 ![](repo/demo.jpg)
 
+## Technical write-up
+[Here](https://nyansatan.github.io/run-unsupported-ios)
+
 ## Tutorial
 
 ### Requirements
@@ -180,6 +183,3 @@ irecovery -n
 
 * Built-in speaker seems to be less loud compared to iOS 5
     * Headphones work fine
-
-## Technical write-up
-*eta son*
