@@ -12,6 +12,21 @@ This repository contains tools and instructions to *convert* iPhone 3GS iOS 6.0 
 
 ![](repo/demo.jpg)
 
+## Changelog
+<details>
+
+### rev1a
+* Fixed the exploit to work on iPod touch 3's with 4096 bytes block size NANDs
+
+* Unlimited `absinthed` & `securekeyvaultd` daemons (were limited to iPhone 3GS by default)
+    * They are something related to device attestation, DRM and etc.
+    * IDK if it actually improves something, hopefully doesn't break anything at least
+
+### rev1
+* Initial release
+
+</details>
+
 ## Technical write-up
 [Here](https://nyansatan.github.io/run-unsupported-ios)
 
