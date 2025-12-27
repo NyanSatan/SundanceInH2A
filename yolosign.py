@@ -7,6 +7,9 @@ from ctypes import *
 from pathlib import Path
 from typing import List
 
+class YolosignError(Exception):
+    pass
+
 PAGE_SIZE = 0x1000
 
 MH_MAGIC = 0xfeedface
@@ -26,7 +29,7 @@ class MachOHeader(Structure):
     def load(cls, data: bytes) -> "MachOHeader":
         c = cls.from_buffer_copy(data[:sizeof(MachOHeader)])
         if c.magic != MH_MAGIC:
-            raise ValueError("bad magic in Mach-O")
+            raise YolosignError("bad magic in Mach-O")
 
         return c
 
@@ -114,7 +117,7 @@ class DyldCacheHeader(Structure):
     def load(cls, data: bytes) -> "DyldCacheHeader":
         c = cls.from_buffer_copy(data[:sizeof(DyldCacheHeader)])
         if c.magic != DSC_MAGIC:
-            raise ValueError("bad magic in DSC")
+            raise YolosignError("bad magic in dyld shared cache header")
 
         return c
 
@@ -143,6 +146,14 @@ class CS_SuperBlob(BigEndianStructure):
         ("count", c_uint32)
     ]
 
+    @classmethod
+    def load(cls, data: bytes) -> "CS_SuperBlob":
+        c = cls.from_buffer_copy(data[:sizeof(CS_SuperBlob)])
+        if c.magic != CSMAGIC_EMBEDDED_SIGNATURE:
+            raise YolosignError("bad magic in code signature SuperBlob")
+
+        return c
+
 class CS_CodeDirectory(BigEndianStructure):
     _fields_ = [
         ("magic", c_uint32),
@@ -155,6 +166,14 @@ class CS_CodeDirectory(BigEndianStructure):
         ("nCodeSlots", c_uint32)
         # ...
     ]
+
+    @classmethod
+    def load(cls, data: bytes) -> "CS_CodeDirectory":
+        c = cls.from_buffer_copy(data[:sizeof(CS_CodeDirectory)])
+        if c.magic != CSMAGIC_CODEDIRECTORY:
+            raise YolosignError("bad magic in code signature CodeDirectory")
+
+        return c
 
 def off2page(off: int) -> int:
     return off // PAGE_SIZE
@@ -170,7 +189,7 @@ def yolosign(path: Path, pages: List[int]):
             if size == 0:
                 size = os.fstat(f.fileno()).st_size - off
 
-        except ValueError:
+        except YolosignError:
             macho = MachO(f)
             _, c = macho.find_cmd(LC_CODE_SIGNATURE)
             code_signature_cmd = LinkeditDataCommand.from_buffer_copy(c)
@@ -181,9 +200,7 @@ def yolosign(path: Path, pages: List[int]):
         f.seek(off)
         code_signature = bytearray(f.read(size))
 
-        sb = CS_SuperBlob.from_buffer_copy(code_signature)
-        if sb.magic != CSMAGIC_EMBEDDED_SIGNATURE:
-            raise ValueError("unexpected SuperBlob magic")
+        sb = CS_SuperBlob.load(code_signature)
 
         cd = None
         for i in range(sb.count):
@@ -191,18 +208,15 @@ def yolosign(path: Path, pages: List[int]):
                 code_signature, sizeof(CS_SuperBlob) + i * sizeof(CS_BlobIndex))
 
             if bi.type == CSSLOT_CODEDIRECTORY:
-                cd = CS_CodeDirectory.from_buffer_copy(code_signature, bi.offset)
+                cd = CS_CodeDirectory.load(code_signature[bi.offset:])
                 break
 
         if cd is None:
-            raise ValueError("no CodeDirectory found")
-
-        if cd.magic != CSMAGIC_CODEDIRECTORY:
-            raise ValueError("unexpected CodeDirectory magic")
+            raise YolosignError("no CodeDirectory found?!")
 
         for p in pages:
             if p > cd.nCodeSlots:
-                raise ValueError("CodeDirectory is too small to contain page %d" % page)
+                raise YolosignError("CodeDirectory is too small to contain page %d" % page)
 
             pageoff = PAGE_SIZE * p
 

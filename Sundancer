@@ -116,7 +116,7 @@ def debug(*args, **kwargs):
 
 # ================== subprocess wrappers ==================
 
-def _run(exec: Path, args: "list[str]", env: dict = None):
+def _run(exec: Path, args: List[str], env: dict = None):
     subprocess.run([exec] + args, env=env, check=True, stdout=subprocess.DEVNULL)
 
 def image3_decrypt(src: Path, dest: Path, iv: str, key: str, keep_cont: bool = False):
@@ -301,7 +301,7 @@ class AddFile:
     gid: int = 0
     mode: int = 0o644
 
-def hoodoo_extract_firmwares(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> "list[AddFile]":
+def hoodoo_extract_firmwares(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> List[AddFile]:
     result = []
 
     log("extracting iOS 5 root filesystem")
@@ -377,7 +377,7 @@ def hoodoo_replace_comp(comp: str, iv: str, key: str, src: Path, wd: Path, ipsw:
 
     return comp
 
-def hoodoo_process_iboots(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> "list[str]":
+def hoodoo_process_iboots(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> List[str]:
     result = {}
 
     # LLB
@@ -434,7 +434,7 @@ def _unlimit_launch_daemon(wd: Path, dmg_path: Path, launch_daemon: str):
 
 JAILBREAK_ROOTFS_MIBS = 128
 
-def sundance_process_root_filesystem(wd: Path, ipsw: IPSW, build_identity: BuildIdentity, to_add: "list[AddFile]", jailbreak: bool = False) -> str:
+def sundance_process_root_filesystem(wd: Path, ipsw: IPSW, build_identity: BuildIdentity, to_add: List[AddFile], jailbreak: bool = False) -> str:
     log("extracting iOS 6 root filesystem")
 
     os_orig_path = wd / extract_comp("OS", wd, ipsw, build_identity)
