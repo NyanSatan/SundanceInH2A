@@ -5,7 +5,7 @@ import os
 import hashlib
 from ctypes import *
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 class YolosignError(Exception):
     pass
@@ -76,7 +76,7 @@ class MachO:
         self.fd.seek(sizeof(MachOHeader))
         self.cmds = self.fd.read(self.header.sizeofcmds)
 
-    def find_cmd(self, cmdtype: int, prev_idx: int = 0) -> tuple[int, bytes]:
+    def find_cmd(self, cmdtype: int, prev_idx: int = 0) -> Tuple[int, bytes]:
         off = 0
         for i in range(self.header.ncmds):
             cmd = LoadCommand.from_buffer_copy(self.cmds, off)

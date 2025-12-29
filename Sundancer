@@ -11,7 +11,7 @@ import argparse
 import plistlib
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 from dataclasses import dataclass, fields, is_dataclass
 
 from yolosign import yolosign, off2page
@@ -71,10 +71,16 @@ class IPSWConfig:
         return next(filter(lambda x: x.component == comp, self.manifest))
 
 @dataclass
+class Defaults:
+    kernel_cache: str
+    kernel_cache_jailbroken: str
+    device_tree: str
+
+@dataclass
 class Config:
-    source_ipsw: IPSWConfig
-    base_ipsw: IPSWConfig
-    defaults: dict
+    original: IPSWConfig
+    destination: IPSWConfig
+    defaults: Defaults
 
 def dataclass_from_dict(cls, d):
     if isinstance(d, list):
@@ -87,7 +93,7 @@ def dataclass_from_dict(cls, d):
     else:
         return cls(d)
 
-SUNDANCE_RAMDISK_SIZE = 16 * 1024 * 1024
+DESTINATION_FW_RAMDISK_SIZE = 16 * 1024 * 1024
 
 # ===================== debug logging =====================
 
@@ -246,6 +252,16 @@ class BuildIdentity:
 
         debug("loaded build identity for %s (%s)" % (self.device, self.restore_behavior))
 
+    @property
+    def device_short(self):
+        if self.device.endswith("ap"):
+            return self.device[:-2]
+        # bold of me to assume this is ever going to be used for dev boards, but...
+        elif self.device.endswith("dev"):
+            return self.device[:-3]
+        
+        raise RuntimeError("device class is neither AP nor DEV?!")
+
 class BuildManifest:
     def __init__(self, data: bytes):
         self.raw = plistlib.loads(data)
@@ -301,14 +317,14 @@ class AddFile:
     gid: int = 0
     mode: int = 0o644
 
-def hoodoo_extract_firmwares(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> List[AddFile]:
+def original_fw_extract_firmwares(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> List[AddFile]:
     result = []
 
     log("extracting iOS 5 root filesystem")
     os_orig_path = wd / extract_comp("OS", wd, ipsw, build_identity)
-    os_raw_path = os_orig_path.with_name("HoodooOS.dmg")
+    os_raw_path = os_orig_path.with_name("OriginalOS.dmg")
 
-    os_cfg = gCfg.source_ipsw.component("OS")
+    os_cfg = gCfg.original.component("OS")
     dmg_extract(os_orig_path, os_raw_path, os_cfg.key)
     os_orig_path.unlink()
 
@@ -365,7 +381,7 @@ def patch_binary(src: Path, dest: Path, patches: List[Patch], codesign: bool = F
     if codesign:
         yolosign(dest, pages)
 
-def hoodoo_replace_comp(comp: str, iv: str, key: str, src: Path, wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> str:
+def original_fw_replace_comp(comp: str, iv: str, key: str, src: Path, wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> str:
     path = wd / extract_comp(comp, wd, ipsw, build_identity)
 
     decrypted_path = path.with_suffix(".decrypted")
@@ -377,7 +393,7 @@ def hoodoo_replace_comp(comp: str, iv: str, key: str, src: Path, wd: Path, ipsw:
 
     return comp
 
-def hoodoo_process_iboots(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> List[str]:
+def original_fw_process_iboots(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> List[str]:
     result = {}
 
     # LLB
@@ -402,14 +418,14 @@ def hoodoo_process_iboots(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -
 
     # iBSS
     ibss_name = extract_comp("iBSS", wd, ipsw, build_identity)
-    ibss_cfg = gCfg.source_ipsw.component("iBSS")
+    ibss_cfg = gCfg.original.component("iBSS")
     ibss_orig_path = wd / ibss_name
     patch_image3(ibss_orig_path, ibss_orig_path, ibss_cfg.iv, ibss_cfg.key, ibss_cfg.patches)
     result["iBSS"] = ibss_name
 
     # iBEC
     ibec_name = extract_comp("iBEC", wd, ipsw, build_identity)
-    ibec_cfg = gCfg.source_ipsw.component("iBEC")
+    ibec_cfg = gCfg.original.component("iBEC")
     ibec_orig_path = wd / ibec_name
     patch_image3(ibec_orig_path, ibec_orig_path, ibec_cfg.iv, ibec_cfg.key, ibec_cfg.patches)
     result["iBEC"] = ibec_name
@@ -434,12 +450,12 @@ def _unlimit_launch_daemon(wd: Path, dmg_path: Path, launch_daemon: str):
 
 JAILBREAK_ROOTFS_MIBS = 128
 
-def sundance_process_root_filesystem(wd: Path, ipsw: IPSW, build_identity: BuildIdentity, to_add: List[AddFile], jailbreak: bool = False) -> str:
+def destination_fw_process_root_filesystem(wd: Path, ipsw: IPSW, build_identity: BuildIdentity, to_add: List[AddFile], jailbreak: bool = False) -> str:
     log("extracting iOS 6 root filesystem")
 
     os_orig_path = wd / extract_comp("OS", wd, ipsw, build_identity)
-    os_raw_path = os_orig_path.with_name("SundanceOS.dmg")
-    os_cfg = gCfg.base_ipsw.component("OS")
+    os_raw_path = os_orig_path.with_name("DestinationOS.dmg")
+    os_cfg = gCfg.destination.component("OS")
 
     dmg_extract(os_orig_path, os_raw_path, os_cfg.key)
     os_orig_path.unlink()
@@ -528,23 +544,23 @@ def sundance_process_root_filesystem(wd: Path, ipsw: IPSW, build_identity: Build
     # hfsplus_mv(os_raw_path, "/", "/%s%s.N18OS" % (build_identity.build_train, ipsw.manifest.build))
 
     log("packaging iOS 6 root filesystem")
-    os_dest = "SundanceOSN18.dmg"
+    os_dest = "DestinationOS-packed.dmg"
     dmg_build(os_raw_path, wd / os_dest)
     os_raw_path.unlink()
 
     return os_dest
 
-def sundance_process_ramdisk(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> str:
+def destination_fw_process_ramdisk(wd: Path, ipsw: IPSW, build_identity: BuildIdentity) -> str:
     log("extracting iOS 6 ramdisk")
 
     rd_orig_path = wd / extract_comp("RestoreRamDisk", wd, ipsw, build_identity)
-    rd_raw_path = rd_orig_path.with_name("SundanceRamdisk.dmg")
-    rd_cfg = gCfg.base_ipsw.component("RestoreRamDisk")
+    rd_raw_path = rd_orig_path.with_name("DestinationRamdisk.dmg")
+    rd_cfg = gCfg.destination.component("RestoreRamDisk")
 
     image3_decrypt(rd_orig_path, rd_raw_path, rd_cfg.iv, rd_cfg.key)
 
     log("growing ramdisk")
-    hfsplus_grow(rd_raw_path, SUNDANCE_RAMDISK_SIZE)
+    hfsplus_grow(rd_raw_path, DESTINATION_FW_RAMDISK_SIZE)
 
     if rd_cfg.file_patches:
         for p in rd_cfg.file_patches:
@@ -561,10 +577,11 @@ def sundance_process_ramdisk(wd: Path, ipsw: IPSW, build_identity: BuildIdentity
     hfsplus_add(rd_raw_path, SCRIPT_ROOT / "exploit" / "exploit.dmg", "/exploit.dmg")
 
     log("moving options plist")
-    hfsplus_mv(rd_raw_path, "/usr/local/share/restore/options.n88.plist", "/usr/local/share/restore/options.n18.plist")
+    hfsplus_mv(
+        rd_raw_path, "/usr/local/share/restore/options.%s.plist" % build_identity.device_short, "/usr/local/share/restore/options.plist")
 
     log("packaging iOS 6 ramdisk")
-    rd_dest = "SundanceRamdiskPatched.img3"
+    rd_dest = "DestinationRamdiskPatched.img3"
     image3_create(rd_raw_path, wd / rd_dest, rd_orig_path)
 
     rd_orig_path.unlink()
@@ -574,10 +591,10 @@ def sundance_process_ramdisk(wd: Path, ipsw: IPSW, build_identity: BuildIdentity
 
 def assemble_bundle(
     wd: Path,
-    hoodoo_ipsw: IPSW,
-    hoodoo_identity: BuildIdentity,
-    sundance_ipsw: IPSW,
-    sundance_identity: BuildIdentity,
+    original_ipsw: IPSW,
+    original_identity: BuildIdentity,
+    destination_ipsw: IPSW,
+    destination_identity: BuildIdentity,
     patched_comps: dict,
     output: Path
 ):
@@ -585,9 +602,9 @@ def assemble_bundle(
 
     output.mkdir()
 
-    raw_identity = hoodoo_identity.raw.copy()
-    raw_identity["Info"]["BuildNumber"] = sundance_ipsw.manifest.build
-    raw_identity["Info"]["BuildTrain"] = sundance_identity.build_train
+    raw_identity = original_identity.raw.copy()
+    raw_identity["Info"]["BuildNumber"] = destination_ipsw.manifest.build
+    raw_identity["Info"]["BuildTrain"] = destination_identity.build_train
 
     for k,v in raw_identity["Manifest"].items():
         comp_path = v["Info"]["Path"]
@@ -603,11 +620,11 @@ def assemble_bundle(
                 comp_dest.unlink()
             shutil.copyfile(wd / patched_comps[k], comp_dest)
         else:
-            hoodoo_ipsw.extract_file(comp_path, comp_dest)
+            original_ipsw.extract_file(comp_path, comp_dest)
 
-    raw_manifest = hoodoo_ipsw.manifest.raw.copy()
-    raw_manifest["ProductBuildVersion"] = sundance_ipsw.manifest.build
-    raw_manifest["ProductVersion"] = sundance_ipsw.manifest.version
+    raw_manifest = original_ipsw.manifest.raw.copy()
+    raw_manifest["ProductBuildVersion"] = destination_ipsw.manifest.build
+    raw_manifest["ProductVersion"] = destination_ipsw.manifest.version
     raw_manifest["BuildIdentities"] = [raw_identity]
 
     with open(output / "BuildManifest.plist", "wb") as f:
@@ -617,13 +634,20 @@ def assemble_bundle(
 def process(args):
     global gCfg
 
-    hoodoo_ipsw = IPSW(args.hoodoo)
-    hoodoo_identity = hoodoo_ipsw.manifest.find_identity("n18ap", "Erase")
+    original_ipsw = IPSW(args.original)
+    destination_ipsw = IPSW(args.destination)
 
-    sundance_ipsw = IPSW(args.sundance)
-    sundance_identity = sundance_ipsw.manifest.find_identity("n88ap", "Erase")
+    gCfg, original_identity, destination_identity = _load_config(original_ipsw, destination_ipsw)
 
-    gCfg = _load_config(hoodoo_identity, sundance_identity)
+    if not args.kernel:
+        if args.jailbreak:
+            kernel = ARTIFACTS_ROOT / gCfg.defaults.kernel_cache_jailbroken
+        else:
+            kernel = ARTIFACTS_ROOT / gCfg.defaults.kernel_cache
+    else:
+        kernel = args.kernel
+
+    devicetree = args.devicetree if args.devicetree else (ARTIFACTS_ROOT / gCfg.defaults.device_tree)
 
     with tempfile.TemporaryDirectory() as wd:
         wd = Path(wd)
@@ -631,34 +655,36 @@ def process(args):
         patched_comps = {}
 
         log("processing iOS 5 iBoots")
-        patched_comps.update(hoodoo_process_iboots(wd, hoodoo_ipsw, hoodoo_identity))
+        patched_comps.update(original_fw_process_iboots(wd, original_ipsw, original_identity))
 
         log("packaging kernelcache")
-        kc_cfg = gCfg.source_ipsw.component("KernelCache")
-        patched_comps["KernelCache"] = patched_comps["RestoreKernelCache"] = hoodoo_replace_comp("KernelCache", kc_cfg.iv, kc_cfg.key, args.kernel, wd, hoodoo_ipsw, hoodoo_identity)
+        kc_cfg = gCfg.original.component("KernelCache")
+        patched_comps["KernelCache"] = patched_comps["RestoreKernelCache"] = original_fw_replace_comp("KernelCache", kc_cfg.iv, kc_cfg.key, kernel, wd, original_ipsw, original_identity)
 
         log("packaging DeviceTree")
-        dt_cfg = gCfg.source_ipsw.component("DeviceTree")
-        patched_comps["DeviceTree"] = patched_comps["RestoreDeviceTree"] = hoodoo_replace_comp("DeviceTree", dt_cfg.iv, dt_cfg.key, args.devicetree, wd, hoodoo_ipsw, hoodoo_identity)
+        dt_cfg = gCfg.original.component("DeviceTree")
+        patched_comps["DeviceTree"] = patched_comps["RestoreDeviceTree"] = original_fw_replace_comp("DeviceTree", dt_cfg.iv, dt_cfg.key, devicetree, wd, original_ipsw, original_identity)
 
         add_files = []
-        add_files += hoodoo_extract_firmwares(wd, hoodoo_ipsw, hoodoo_identity)
+        add_files += original_fw_extract_firmwares(wd, original_ipsw, original_identity)
 
-        patched_comps["OS"] = sundance_process_root_filesystem(wd, sundance_ipsw, sundance_identity, add_files, args.jailbreak)
-        patched_comps["RestoreRamDisk"] = sundance_process_ramdisk(wd, sundance_ipsw, sundance_identity)
+        patched_comps["OS"] = destination_fw_process_root_filesystem(wd, destination_ipsw, destination_identity, add_files, args.jailbreak)
+        patched_comps["RestoreRamDisk"] = destination_fw_process_ramdisk(wd, destination_ipsw, destination_identity)
 
         assemble_bundle(
             wd,
-            hoodoo_ipsw,
-            hoodoo_identity,
-            sundance_ipsw,
-            sundance_identity,
+            original_ipsw,
+            original_identity,
+            destination_ipsw,
+            destination_identity,
             patched_comps,
             args.output
         )
 
-def _load_config(source_identity: BuildIdentity, base_identity: BuildIdentity) -> Config:
-    for root, dirs, files in os.walk(CONFIGS_ROOT):
+def _load_config(original_ipsw: IPSW, destination_ipsw: IPSW) -> Tuple[Config, BuildIdentity, BuildIdentity]:
+    # Big O is watching me!
+    matches = []
+    for root, _, files in os.walk(CONFIGS_ROOT):
         for f in files:
             full_path = Path(root) / f
 
@@ -668,63 +694,68 @@ def _load_config(source_identity: BuildIdentity, base_identity: BuildIdentity) -
             with open(full_path, "r") as f:
                 curr = json.load(f)
 
-            if curr["source_ipsw"]["device"] == source_identity.device and curr["source_ipsw"]["build"] == source_identity.manifest.build \
-                and curr["base_ipsw"]["device"] == base_identity.device and curr["base_ipsw"]["build"] == base_identity.manifest.build:
-                return dataclass_from_dict(Config, curr)
+            for original_identity in original_ipsw.manifest.identities:
+                if original_identity.restore_behavior != "Erase":
+                    continue
+
+                for destination_identity in destination_ipsw.manifest.identities:
+                    if destination_identity.restore_behavior != "Erase":
+                        continue
+
+                    if curr["original"]["device"] == original_identity.device and curr["original"]["build"] == original_identity.manifest.build \
+                        and curr["destination"]["device"] == destination_identity.device and curr["destination"]["build"] == destination_identity.manifest.build:
+                        matches.append(
+                            (dataclass_from_dict(Config, curr), original_identity, destination_identity,))
+
+    if len(matches) == 0:
+        raise RuntimeError("no config available for such IPSWs combo")
+
+    if len(matches) > 1:
+        raise RuntimeError("BUG: multiple configs for this IPSWs combo")
+
+    return matches.pop()
 
 SCRIPT_ROOT = Path(__file__).parent
 RESOURCES_ROOT = SCRIPT_ROOT / "resources"
+ARTIFACTS_ROOT = SCRIPT_ROOT / "artifacts"
 CONFIGS_ROOT = SCRIPT_ROOT / "configs"
-
-DEFAULT_KERNEL = SCRIPT_ROOT / "artifacts" / "kernelcache.n18ap.bin"
-DEFAULT_JAILBROKEN_KERNEL = SCRIPT_ROOT / "artifacts" / "kernelcache.jailbroken.n18ap.bin"
-DEFAULT_DEVICE_TREE = SCRIPT_ROOT / "artifacts" / "DeviceTree.n18ap.bin"
 
 gCfg = None
 
 def main():
-    parser = argparse.ArgumentParser(description="convert iPod touch 3 iOS 5.1.1 IPSW to iOS 6.0")
-    parser.add_argument("hoodoo", type=Path, help="path to iPod touch 3 5.1.1 (9B206) IPSW")
-    parser.add_argument("sundance", type=Path, help="path to iPhone 3GS 6.0 (10A403) IPSW")
-    parser.add_argument("output", type=Path, help="output IPSW to flash")
+    parser = argparse.ArgumentParser(description="convert iPod touch 3 iOS 5.1.1 IPSW to iOS 6.x")
+    parser.add_argument("original", type=Path, help="path to original IPSW for target device")
+    parser.add_argument("destination", type=Path, help="path to destination IPSW")
+    parser.add_argument("output", type=Path, help="path to output restore bundle")
+    parser.add_argument("-v", "--verbose", action="store_true", help="verbose logging")
     parser.add_argument("-j", "--jailbreak", action="store_true", help="apply jailbreak")
     parser.add_argument(
         "-k", "--kernel",
+        help="override kernelcache",
         type=Path,
-        help="path to kernel, default - the one in artifacts/"
+        required=False
     )
     parser.add_argument(
         "-d", "--devicetree",
+        help="override DeviceTree",
         type=Path,
-        default=DEFAULT_DEVICE_TREE,
-        help="path to DeviceTree, default - " + str(DEFAULT_DEVICE_TREE.relative_to(SCRIPT_ROOT))
+        required=False
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="verbose logging")
 
     args = parser.parse_args()
 
-    if not args.kernel:
-        if args.jailbreak:
-            args.kernel = DEFAULT_JAILBROKEN_KERNEL
-        else:
-            args.kernel = DEFAULT_KERNEL
-
     _debug_init(args.verbose)
-
-    if not args.hoodoo.exists():
-        print("iPod touch 3 5.1.1 (9B206) IPSW does NOT exist")
-        exit(-1)
-
-    if not args.sundance.exists():
-        print("iPhone 3GS 6.0 (10A403) IPSW does NOT exist")
-        exit(-1)
-
-    if not args.kernel.exists():
-        print("kernelcache does NOT exist")
-        exit(-1)
 
     if args.output.exists():
         print("output path already exists")
+        exit(-1)
+
+    if not args.original.exists():
+        print("original IPSW does NOT exist")
+        exit(-1)
+
+    if not args.destination.exists():
+        print("destination IPSW does NOT exist")
         exit(-1)
 
     process(args)

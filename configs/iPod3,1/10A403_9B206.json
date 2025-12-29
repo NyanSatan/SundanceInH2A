@@ -1,5 +1,5 @@
 {
-    "source_ipsw": {
+    "original": {
         "device": "n18ap",
         "build": "9B206",
         "manifest": [
@@ -74,7 +74,7 @@
             }
         ]
     },
-    "base_ipsw": {
+    "destination": {
         "device": "n88ap",
         "build": "10A403",
         "manifest": [
@@ -142,8 +142,8 @@
         ]
     },
     "defaults": {
-        "Kernelcache": "kernelcache.n18ap.bin",
-        "KernelcacheJailbroken": "kernelcache.jailbroken.n18ap.bin",
-        "DeviceTree": "DeviceTree.n18ap.bin"
+        "kernel_cache": "kernelcache.n18ap.bin",
+        "kernel_cache_jailbroken": "kernelcache.jailbroken.n18ap.bin",
+        "device_tree": "DeviceTree.n18ap.bin"
     }
 }
