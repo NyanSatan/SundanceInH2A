@@ -49,6 +49,7 @@ class Bluetooth:
     offset: hexint
     length: hexint
 
+# XXX split this to `original` & `destination`?
 @dataclass
 class ManifestItem:
     component: str
@@ -68,7 +69,8 @@ class IPSWConfig:
     manifest: List[ManifestItem]
 
     def component(self, comp: str):
-        return next(filter(lambda x: x.component == comp, self.manifest))
+        return next(
+            filter(lambda x: x.component == comp, self.manifest))
 
 @dataclass
 class Defaults:
@@ -133,106 +135,92 @@ def image3_decrypt(src: Path, dest: Path, iv: str, key: str, keep_cont: bool = F
 
     _run(
         SCRIPT_ROOT / "executables" / "xpwntool",
-        args
-    )
+        args)
 
     debug("decrypted Image3 at %s to %s" % (src.name, dest.name))
 
 def image3_create(src: Path, dest: Path, template: Path):
     _run(
         SCRIPT_ROOT / "executables" / "xpwntool",
-        [str(src), str(dest), "-t", str(template)]
-    )
+        [str(src), str(dest), "-t", str(template)])
 
     debug("created Image3 at %s from %s with template %s" % (dest.name, src.name, template.name))
 
 def dmg_extract(src: Path, dest: Path, key: str):
     _run(
         SCRIPT_ROOT / "executables" / "dmg",
-        ["extract", str(src), str(dest), "-k", key]
-    )
+        ["extract", str(src), str(dest), "-k", key])
 
     debug("decrypted DMG at %s to %s" % (src.name, dest.name))
 
 def dmg_build(src: Path, dest: Path):
     _run(
         SCRIPT_ROOT / "executables" / "dmg",
-        ["build", str(src), str(dest)]
-    )
+        ["build", str(src), str(dest)])
 
     debug("built DMG at %s to %s" % (src.name, dest.name))
 
 def hfsplus_grow(dmg: Path, size: int):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "grow", str(size)]
-    )
+        [str(dmg), "grow", str(size)])
 
     debug("grown HFS+ image at %s to %d bytes" % (dmg.name, size))
 
 def hfsplus_extract(dmg: Path, src: str, dest: Path):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "extract", src, str(dest)]
-    )
+        [str(dmg), "extract", src, str(dest)])
 
     debug("extracted %s to %s from HFS+ image at %s" % (src, dest.name, dmg.name))
 
 def hfsplus_replace(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0, mode: int = 0o644):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "rm", dest]
-    )
+        [str(dmg), "rm", dest])
 
     hfsplus_add(dmg, src, dest, uid, gid, mode)
 
 def hfsplus_add(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0, mode: int = 0o644):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "add", str(src), dest]
-    )
+        [str(dmg), "add", str(src), dest])
 
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "chown", "%d:%d" % (uid, gid), dest]
-    )
+        [str(dmg), "chown", "%d:%d" % (uid, gid), dest])
 
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "chmod", "%o" % (mode), dest]
-    )
+        [str(dmg), "chmod", "%o" % (mode), dest])
 
     debug("added %s in HFS+ image at %s to %s" % (src.name, dmg.name, dest))
 
 def hfsplus_rm(dmg: Path, path: str):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "rm", path]
-    )
+        [str(dmg), "rm", path])
 
     debug("removed %s from HFS+ image at %s" % (path, dmg.name))
 
 def hfsplus_rmdir(dmg: Path, dir: str):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "rmall", dir]
-    )
+        [str(dmg), "rmall", dir])
 
     debug("removed %s folder from HFS+ image at %s" % (dir, dmg.name))
 
 def hfsplus_mv(dmg: Path, src: str, dest: str):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "mv", src, dest]
-    )
+        [str(dmg), "mv", src, dest])
 
     debug("moved %s to %s in HFS+ image at %s" % (src, dest, dmg.name))
 
 def hfsplus_untar(dmg: Path, tar: Path, dest: str):
     _run(
         SCRIPT_ROOT / "executables" / "hfsplus",
-        [str(dmg), "untar", str(tar), dest]
-    )
+        [str(dmg), "untar", str(tar), dest])
 
     debug("untar'd %s to %s in HFS+ image at %s" % (tar.name, dest, dmg.name))
 
