@@ -69,9 +69,8 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 ## Tutorial
 
 ### Requirements
-* A computer running Mac OS X 10.9+
+* A computer running Mac OS X 10.9+ or a modern Linux distro
     * 10.8, 10.7 and likely even 10.6 can work as well if you bring `tar` capable of unpacking XZ-compressed archives - for the external resources
-    * Easy to port to Linux and even Windows - basically, you need to recompile everything under `executables/` for these platforms
 
 * Python 3.7+
 
@@ -96,10 +95,19 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 
 * Resources that I cannot put straight into this repository - customly assembled kernelcaches & userspace libraries
     * I *heard* that executing this command will yield them:
-
+    
+        macOS:
+   
         ```shell
         cd /path/to/SundanceInH2A
         curl https://gist.githubusercontent.com/NyanSatan/1cf6921821484a2f8f788e567b654999/raw/54c6ad7554710af454c87ec2d99f869e6e669c99/SundanceResources.b64 | base64 -D | tar -xvf -
+        ```
+        
+        Linux:
+    
+        ```shell
+        cd /path/to/SundanceInH2A
+        curl https://gist.githubusercontent.com/NyanSatan/1cf6921821484a2f8f788e567b654999/raw/54c6ad7554710af454c87ec2d99f869e6e669c99/SundanceResources.b64 | base64 --decode | xz -d | tar -xvf -
         ```
 
     * This command will write files to `artifacts` and `resources` directories
@@ -116,12 +124,12 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
         ```
 
 * Pwned DFU tool
-    * For modern Mac OS X (11.x Big Sur+) I recommend [iPwnder32](https://github.com/dora2ios/iPwnder32) by **dora2ios**
-    * For older ones [ipwndfu](https://github.com/axi0mX/ipwndfu) by **axi0mX** should do fine
+    * For macOS, use [iPwnder32](https://github.com/dora2ios/iPwnder32) by **dora2ios**
+    * For Linux, use this version of [iPwnder](https://github.com/LukeZGD/iPwnder32)
 
 ### Steps
 
-0. This repository contains precompiled executables that I built statically for your convinience ("statically" in terms of external dependencies). Modern Mac OS X might put them on quarantine and refuse to run them. To get rid of this restriction, remove extended attributes from all the files in `executables/`
+0. This repository contains precompiled executables that I built statically for your convenience ("statically" in terms of external dependencies). Modern Mac OS X might put them on quarantine and refuse to run them. To get rid of this restriction, remove extended attributes from all the files in `executables/`
 
     ```shell
     ➜  SundanceInH2A git:(master) ✗ xattr -cr executables
@@ -170,10 +178,10 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 
 2. Enter pwned DFU on your device
     1. First, enter normal bootrom DFU (involves pressing and holding Home and Power buttons - there are plenty of guides online)
-    2. Then run either **iPwnder** or **ipwndfu** with `-p` flag
+    2. Then run **iPwnder** with `-p` flag
 
     ```shell
-    ➜  SundanceInH2A git:(master) ✗ iPwnder32 -p
+    ➜  SundanceInH2A git:(master) ✗ ./iPwnder32 -p
     ** iPwnder32 - RELEASE v3.2.0 [3C152] by @dora2ios
     Waiting for device in DFU mode...
     DFU device infomation iPod Touch (3rd gen) [iPod3,1]
@@ -186,8 +194,16 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 
 3. Start restore! `idevicerestore` is provided by this repo under `executables/`
 
+    macOS:
+   
     ```shell
-    ➜  SundanceInH2A git:(master) ✗ executables/idevicerestore -ey CUSTOM_BUNDLE
+    ➜  SundanceInH2A git:(master) ✗ executables/$(uname)/idevicerestore -ey CUSTOM_BUNDLE
+    ```
+    
+    Linux:
+   
+    ```shell
+    ➜  SundanceInH2A git:(master) ✗ executables/$(uname)/$(uname -m)/idevicerestore -ey CUSTOM_BUNDLE
     ```
 
 Restore is going to take around 5 minutes. If everything goes well, you'll end up on iOS 6 setup screen
