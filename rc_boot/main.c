@@ -13,28 +13,22 @@
 
 #include "gpt.h"
 
-#define DATA_PARTITION_BDEV "/dev/disk0s1s2"
-#define DATA_PARTITION_MNT  "/mnt2"
+#define DATA_PARTITION_BDEV     "/dev/disk0s1s2"
+#define DATA_PARTITION_MNT      "/mnt2"
 
 #define EXPLOIT_PARTITION_BDEV  "/dev/rdisk0s1s3"
 #define EXPLOIT_PATH            "/exploit.dmg"
 #define EXPLOIT_LEN             (0x20000)
 
-static
-uint8_t GPTHFSSignature[] = {0x00, 0x53, 0x46, 0x48, 0x00, 0x00, 0xAA, 0x11, 0xAA, 0x11, 0x00, 0x30, 0x65, 0x43, 0xEC, 0xAC};
-
-#define REQUIRE_NOERR(__expr, __label) \
-    do { \
-        if ((__expr) != 0) { \
-            goto __label; \
-        } \
-    } while(0);
-
 int spawn(char *const argv[]) {
     printf("executing %s\n", argv[0]);
 
     pid_t pid;
-    posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL);
+    int spawn_ret = posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL);
+    if (spawn_ret != 0) {
+        printf("failed to spawn %s\n", argv[0]);
+        return -1;
+    }
 
     int status;
     waitpid(pid, &status, 0);
@@ -51,10 +45,10 @@ int spawn(char *const argv[]) {
     return ret;
 }
 
-int mount_hfs(const char *dev, const char *mountpoint) {
+int mount_hfs(char *dev, char *mountpoint) {
     printf("mounting HFS @ %s to %s\n", dev, mountpoint);
 
-    const char *argv[] = {
+    char *const argv[] = {
         "/sbin/mount_hfs",
         dev,
         mountpoint,
@@ -64,10 +58,10 @@ int mount_hfs(const char *dev, const char *mountpoint) {
     return spawn(argv);
 }
 
-int nvram_delete(const char *var) {
+int nvram_delete(char *var) {
     printf("deleting NVRAM variable \"%s\"\n", var);
 
-    const char *argv[] = {
+    char *const argv[] = {
         "/usr/sbin/nvram",
         "-d",
         var,
@@ -78,7 +72,7 @@ int nvram_delete(const char *var) {
 }
 
 int nvram_set(const char *var, const char *value) {
-    char a[256] = { 0 };
+    char a[2048] = { 0 };
     snprintf(a, sizeof(a), "%s=%s", var, value);
 
     printf("setting NVRAM variable \"%s\" to \"%s\"\n", var, value);
@@ -100,12 +94,30 @@ int hfs_resize(const char *path, uint64_t size) {
 
     int err;
     if ((err = fsctl(path, HFSRESIZE, &size, 0)) != 0) {
-        printf("HFS resize failed. errno=%i\n", err);
+        printf("HFS resize failed, errno=%i\n", err);
         return -1;
     };
 
     return 0;
 }
+
+#define FAILURE_NVRAM_VAR   "sun-h2a-rcboot-failure-reason"
+
+#define RECORD_FAILURE(fmt, ...) \
+    do { \
+        printf(fmt "\n", ##__VA_ARGS__); \
+        static char __tmp[1024] = { 0 }; \
+        snprintf(__tmp, sizeof(__tmp), fmt, ##__VA_ARGS__); \
+        nvram_set(FAILURE_NVRAM_VAR, __tmp); \
+    } while(0)
+
+#define REQUIRE_NOERR(__expr, __label) \
+    do { \
+        if ((__expr) != 0) { \
+            RECORD_FAILURE("REQUIRE FAILED: %s", #__expr); \
+            goto __label; \
+        } \
+    } while(0);
 
 int exploit_install() {
     printf("====== installing the exploit ======\n");
@@ -116,21 +128,19 @@ int exploit_install() {
     void *hdr_blocks = NULL;
     void *exploit_buf = NULL;
 
-    /* Data paratition gotta be mounted before opening GPT, apparently */
-    REQUIRE_NOERR(
-        mount_hfs(DATA_PARTITION_BDEV, DATA_PARTITION_MNT), out);
+    /* Data partition gotta be mounted before opening GPT, apparently */
+    REQUIRE_NOERR(mount_hfs(DATA_PARTITION_BDEV, DATA_PARTITION_MNT), out);
 
     /* opening the fake GPT */
     int gpt_fd = open("/dev/rdisk0s1", O_RDWR | O_SHLOCK);
     if (gpt_fd < 0) {
-        printf("failed to open " "/dev/rdisk0s1" "?!\n");
+        RECORD_FAILURE("failed to open /dev/rdisk0s1?!");
         goto out;
     }
 
     /* getting block size of our disk */
     uint32_t blocksize = -1;
-    REQUIRE_NOERR(
-        ioctl(gpt_fd, DKIOCGETBLOCKSIZE, &blocksize), out);
+    REQUIRE_NOERR(ioctl(gpt_fd, DKIOCGETBLOCKSIZE, &blocksize), out);
 
     printf("block size - %d\n", blocksize);
 
@@ -140,7 +150,7 @@ int exploit_install() {
     hdr_blocks = malloc(read_len);
 
     if (pread(gpt_fd, hdr_blocks, read_len, blocksize) != read_len) {
-        printf("failed to read GPT?!\n");
+        RECORD_FAILURE("failed to read GPT?!");
         goto out;
     }
 
@@ -148,22 +158,22 @@ int exploit_install() {
 
     /* sanity checking the header */
     if (memcmp(hdr->signature, GPT_MAGIC, sizeof(hdr->signature)) != 0) {
-        printf("unexpected GPT magic\n");
+        RECORD_FAILURE("unexpected GPT magic");
         goto out;
     }
 
     if (hdr->revision != 0x1) {
-        printf("unexpected GPT revision (0x%x)\n", hdr->revision);
+        RECORD_FAILURE("unexpected GPT revision (0x%x)", hdr->revision);
         goto out;
     }
 
     if (hdr->ptab_lba != 2) {
-        printf("unexpected GPT ptab LBA (0x%llx)\n", hdr->ptab_lba);
+        RECORD_FAILURE("unexpected GPT ptab LBA (0x%llx)", hdr->ptab_lba);
         goto out;
     }
 
     if (hdr->ptab_cnt * hdr->ptab_entry_size > blocksize) {
-        printf("partition entries take more than 1 block?!\n");
+        RECORD_FAILURE("partition entries take more than 1 block?!");
         goto out;
     }
 
@@ -174,8 +184,7 @@ int exploit_install() {
     uint64_t new_data_len = data_len - EXPLOIT_LEN;
 
     /* resizing! */
-    REQUIRE_NOERR(
-        hfs_resize(DATA_PARTITION_MNT, new_data_len), out);
+    REQUIRE_NOERR(hfs_resize(DATA_PARTITION_MNT, new_data_len), out);
 
     parts[1].last_lba = parts[1].first_lba + (new_data_len - EXPLOIT_LEN) / blocksize - 1;
 
@@ -196,7 +205,7 @@ int exploit_install() {
     /* write the updated GPT */
     printf("writing GPT...\n");
     if (pwrite(gpt_fd, hdr_blocks, read_len, blocksize) != read_len) {
-        printf("failed to write GPT!\n");
+        RECORD_FAILURE("failed to write GPT!");
         goto out;
     }
 
@@ -214,7 +223,7 @@ int exploit_install() {
     /* reading the exploit image */
     exploit_image_fd = open(EXPLOIT_PATH, O_RDONLY);
     if (exploit_image_fd < 0) {
-        printf("failed to open " EXPLOIT_PATH "?!\n");
+        RECORD_FAILURE("failed to open " EXPLOIT_PATH "?!");
         goto out;
     }
 
@@ -226,14 +235,14 @@ int exploit_install() {
     exploit_image_fd = -1;
 
     if (r != EXPLOIT_LEN) {
-        printf("failed to read " EXPLOIT_PATH "?!\n");
+        RECORD_FAILURE("failed to read " EXPLOIT_PATH "?!");
         goto out;
     }
 
     /* opening exploit partition */
     exploit_part_fd = open(EXPLOIT_PARTITION_BDEV, O_WRONLY);
     if (exploit_part_fd < 0) {
-        printf("failed to open " EXPLOIT_PARTITION_BDEV "?!\n");
+        RECORD_FAILURE("failed to open " EXPLOIT_PARTITION_BDEV "?!");
         goto out;
     }
 
@@ -244,7 +253,7 @@ int exploit_install() {
     exploit_part_fd = -1;
 
     if (w != EXPLOIT_LEN) {
-        printf("failed to write exploit image?!\n");
+        RECORD_FAILURE("failed to write exploit image?!");
         goto out;
     }
 
@@ -259,12 +268,7 @@ int exploit_install() {
     }
 
     /* setting "boot-partition" var to 3rd partition */
-    REQUIRE_NOERR(nvram_set(
-        "boot-partition", "2"), out);
-
-    /* XXX end users do not really need it? */
-    REQUIRE_NOERR(nvram_set(
-        "debug-uarts", "3"), out);
+    REQUIRE_NOERR(nvram_set("boot-partition", "2"), out);
 
     ret = 0;
 
@@ -317,26 +321,31 @@ int main(int argc, const char *argv[]) {
     }
 
     umask(0);
-    
+
     char *restored_argv[] = {
         "/usr/local/bin/restored_external",
         "-server",
         NULL
     };
 
-    REQUIRE_NOERR(
-        spawn(restored_argv), fail);
+    if (spawn(restored_argv) != 0) {
+        printf("restored_external FAILED\n");
+        goto fail;
+    }
 
-    REQUIRE_NOERR(
-        exploit_install(), fail);
+    if (exploit_install() != 0) {
+        printf("FAILED to install the exploit\n");
+        goto fail;
+    }
+
+    /* remove the failure reason var if it all went good */
+    nvram_delete(FAILURE_NVRAM_VAR);
 
     printf("all done! rebooting...\n");
     goto out;
 
 fail:
-    printf("something FAILED!\n");
     printf("clearing \"boot-partition\" and rebooting...\n");
-
     nvram_delete("boot-partition");
 
 out:
