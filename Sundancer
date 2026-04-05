@@ -109,7 +109,7 @@ _verbose = False
 
 def _debug_init(verbose: bool):
     global start_time, _verbose
-    start_time = time.time()   
+    start_time = time.time()
     _verbose = verbose
 
 def _log(color, args, kwargs):
@@ -390,7 +390,7 @@ def original_fw_process_iboots(wd: Path, ipsw: IPSW, build_identity: BuildIdenti
 
     # iBoot
     result["iBoot"] = extract_comp("iBoot", wd, ipsw, build_identity)
-    
+
     def patch_image3(src: Path, dest: Path, iv: str, key: str, patches: List[Patch]):
         raw_path = src.with_suffix(".raw")
         image3_decrypt(src, raw_path, iv, key)
@@ -477,7 +477,7 @@ def destination_fw_process_root_filesystem(wd: Path, ipsw: IPSW, build_identity:
 
     with open(lockdownd_plist_tmp_path, "rb") as f:
         lockdownd_plist = plistlib.load(f)
-    
+
     lockdownd_plist["EnvironmentVariables"] = {
         "DYLD_INSERT_LIBRARIES" : HACTIVATOR_DYLIB_DESTINATION
     }
@@ -589,6 +589,9 @@ def destination_fw_process_ramdisk(wd: Path, ipsw: IPSW, build_identity: BuildId
     log("putting exploit.dmg")
     hfsplus_add(rd_raw_path, SCRIPT_ROOT / "exploit" / gCfg.defaults.exploit, "/exploit.dmg")
 
+    log("putting exploit.patches")
+    hfsplus_add(rd_raw_path, SCRIPT_ROOT / "exploit" / "exploit.patches", "/exploit.patches")
+
     log("patching options plist")
     hfsplus_mv(
         rd_raw_path, "/usr/local/share/restore/options.%s.plist" % build_identity.device_short, OPTIONS_PLIST_DESTINATION)
@@ -598,7 +601,7 @@ def destination_fw_process_ramdisk(wd: Path, ipsw: IPSW, build_identity: BuildId
 
     with open(options_tmp_path, "rb") as f:
         options = plistlib.load(f)
-    
+
     options["UpdateBaseband"] = False
 
     with open(options_tmp_path, "wb") as f:

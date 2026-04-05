@@ -19,6 +19,7 @@
 #define EXPLOIT_PARTITION_BDEV  "/dev/rdisk0s1s3"
 #define EXPLOIT_PATH            "/exploit.dmg"
 #define EXPLOIT_LEN             (0x20000)
+#define EXPLOIT_PATCHES_PATH    "/exploit.patches"
 
 int spawn(char *const argv[]) {
     printf("executing %s\n", argv[0]);
@@ -118,6 +119,70 @@ int hfs_resize(const char *path, uint64_t size) {
             goto __label; \
         } \
     } while(0);
+
+struct __attribute__((packed)) exploit_patch {
+    uint32_t blocksize;
+    uint32_t offset;
+    uint32_t value;
+};
+
+int exploit_apply_patches(void *exploit, size_t exploit_len, uint32_t blocksize) {
+    int ret = -1;
+    int fd  = -1;
+    struct exploit_patch *patches = NULL;
+
+    fd = open(EXPLOIT_PATCHES_PATH, O_RDONLY);
+    if (fd < 0) {
+        printf("exploit patches are missing, skipping then\n");
+        return 0;
+    }
+
+    struct stat st = { 0 };
+    fstat(fd, &st);
+
+    if (st.st_size % sizeof(struct exploit_patch)) {
+        RECORD_FAILURE("malformed exploit patches");
+        goto out;
+    }
+
+    patches = malloc(st.st_size);
+
+    int r = read(fd, patches, st.st_size);
+    close(fd);
+    fd = -1;
+
+    if (r != st.st_size) {
+        RECORD_FAILURE("failed to read exploit patches");
+        goto out;
+    }
+
+    int count = st.st_size / sizeof(struct exploit_patch);
+    int applied = 0;
+
+    for (int i = 0; i < count; i++) {
+        struct exploit_patch *curr = patches + i;
+
+        if (curr->blocksize == blocksize) {
+            *(uint32_t *)(exploit + curr->offset) = curr->value;
+            applied++;
+        }
+    }
+
+    printf("applied %d exploit patches\n", applied);
+
+    ret = 0;
+
+out:
+    if (fd != -1) {
+        close(fd);
+    }
+
+    if (patches) {
+        free(patches);
+    }
+
+    return ret;
+}
 
 int exploit_install() {
     printf("====== installing the exploit ======\n");
@@ -236,6 +301,11 @@ int exploit_install() {
 
     if (r != EXPLOIT_LEN) {
         RECORD_FAILURE("failed to read " EXPLOIT_PATH "?!");
+        goto out;
+    }
+
+    /* apply exploit tunables for given blocksize */
+    if (exploit_apply_patches(exploit_buf, EXPLOIT_LEN, blocksize) != 0) {
         goto out;
     }
 
