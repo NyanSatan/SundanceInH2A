@@ -178,7 +178,7 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 
 2. Enter pwned DFU on your device
     1. First, enter normal bootrom DFU (involves pressing and holding Home and Power buttons - there are plenty of guides online)
-    2. Then run **iPwnder** with `-p` flag
+    2. Then run either **iPwnder** or **ipwndfu** with `-p` flag
 
     ```shell
     ➜  SundanceInH2A git:(master) ✗ ./iPwnder32 -p
