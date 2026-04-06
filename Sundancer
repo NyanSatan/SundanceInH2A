@@ -10,6 +10,7 @@ import tempfile
 import argparse
 import plistlib
 import subprocess
+import platform
 from pathlib import Path
 from typing import List, Tuple
 from dataclasses import dataclass, fields, is_dataclass
@@ -128,6 +129,15 @@ def debug(*args, **kwargs):
 def _run(exec: Path, args: List[str], env: dict = None):
     subprocess.run([exec] + args, env=env, check=True, stdout=subprocess.DEVNULL)
 
+def get_executable_path() -> Path:
+    base = SCRIPT_ROOT / "executables" / platform.system()
+
+    if platform.system() == "Darwin":
+        return base
+
+    arch = platform.machine()
+    return base / arch
+
 def image3_decrypt(src: Path, dest: Path, iv: str, key: str, keep_cont: bool = False):
     args = [str(src), str(dest), "-iv", str(iv), "-k", str(key)]
 
@@ -135,92 +145,92 @@ def image3_decrypt(src: Path, dest: Path, iv: str, key: str, keep_cont: bool = F
         args += ["-decrypt"]
 
     _run(
-        SCRIPT_ROOT / "executables" / "xpwntool",
+        get_executable_path() / "xpwntool",
         args)
 
     debug("decrypted Image3 at %s to %s" % (src.name, dest.name))
 
 def image3_create(src: Path, dest: Path, template: Path):
     _run(
-        SCRIPT_ROOT / "executables" / "xpwntool",
+        get_executable_path() / "xpwntool",
         [str(src), str(dest), "-t", str(template)])
 
     debug("created Image3 at %s from %s with template %s" % (dest.name, src.name, template.name))
 
 def dmg_extract(src: Path, dest: Path, key: str):
     _run(
-        SCRIPT_ROOT / "executables" / "dmg",
+        get_executable_path() / "dmg",
         ["extract", str(src), str(dest), "-k", key])
 
     debug("decrypted DMG at %s to %s" % (src.name, dest.name))
 
 def dmg_build(src: Path, dest: Path):
     _run(
-        SCRIPT_ROOT / "executables" / "dmg",
+        get_executable_path() / "dmg",
         ["build", str(src), str(dest)])
 
     debug("built DMG at %s to %s" % (src.name, dest.name))
 
 def hfsplus_grow(dmg: Path, size: int):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "grow", str(size)])
 
     debug("grown HFS+ image at %s to %d bytes" % (dmg.name, size))
 
 def hfsplus_extract(dmg: Path, src: str, dest: Path):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "extract", src, str(dest)])
 
     debug("extracted %s to %s from HFS+ image at %s" % (src, dest.name, dmg.name))
 
 def hfsplus_replace(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0, mode: int = 0o644):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "rm", dest])
 
     hfsplus_add(dmg, src, dest, uid, gid, mode)
 
 def hfsplus_add(dmg: Path, src: Path, dest: str, uid: int = 0, gid: int = 0, mode: int = 0o644):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "add", str(src), dest])
 
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "chown", "%d:%d" % (uid, gid), dest])
 
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "chmod", "%o" % (mode), dest])
 
     debug("added %s in HFS+ image at %s to %s" % (src.name, dmg.name, dest))
 
 def hfsplus_rm(dmg: Path, path: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "rm", path])
 
     debug("removed %s from HFS+ image at %s" % (path, dmg.name))
 
 def hfsplus_rmdir(dmg: Path, dir: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "rmall", dir])
 
     debug("removed %s folder from HFS+ image at %s" % (dir, dmg.name))
 
 def hfsplus_mv(dmg: Path, src: str, dest: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "mv", src, dest])
 
     debug("moved %s to %s in HFS+ image at %s" % (src, dest, dmg.name))
 
 def hfsplus_untar(dmg: Path, tar: Path, dest: str):
     _run(
-        SCRIPT_ROOT / "executables" / "hfsplus",
+        get_executable_path() / "hfsplus",
         [str(dmg), "untar", str(tar), dest])
 
     debug("untar'd %s to %s in HFS+ image at %s" % (tar.name, dest, dmg.name))

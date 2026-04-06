@@ -15,6 +15,9 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 ## Changelog
 <details>
 
+### rev4b
+* Added Linux executables (thanks to LukeZGD!)
+
 ### rev4a
 * Fixed Wi-Fi on Chinese region iPads
 
@@ -69,9 +72,8 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 ## Tutorial
 
 ### Requirements
-* A computer running Mac OS X 10.9+
+* A computer running Mac OS X 10.9+ or a modern Linux distribution
     * 10.8, 10.7 and likely even 10.6 can work as well if you bring `tar` capable of unpacking XZ-compressed archives - for the external resources
-    * Easy to port to Linux and even Windows - basically, you need to recompile everything under `executables/` for these platforms
 
 * Python 3.7+
 
@@ -84,22 +86,30 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
     * [iPod touch 3](https://secure-appldnld.apple.com/iOS5.1.1/041-4300.20120427.WvgGq/iPod3,1_5.1.1_9B206_Restore.ipsw)
     * [iPad 1](https://secure-appldnld.apple.com/iOS5.1.1/041-4292.02120427.Tkk0d/iPad1,1_5.1.1_9B206_Restore.ipsw)
 
-
 * Destination iOS 6 IPSW
     * iPod touch 3 uses iPhone 3GS firmwares:
         1. [6.0 (10A403)](https://secure-appldnld.apple.com/iOS6/Restore/041-7173.20120919.sDDMh/iPhone2,1_6.0_10A403_Restore.ipsw)
         2. [6.1.3 (10B329)](https://secure-appldnld.apple.com/iOS6.1/091-2371.20130319.715gt/iPhone2,1_6.1.3_10B329_Restore.ipsw)
         3. [6.1.6 (10B500)](https://secure-appldnld.apple.com/iOS6.1/091-3457.20140221.Btt3e/iPhone2,1_6.1.6_10B500_Restore.ipsw)
-    
+
     * iPad 1 uses iPad 2 (`iPad2,1`) firmware:
         1. [6.1.3 (10B329)](https://secure-appldnld.apple.com/iOS6.1/091-2397.20130319.EEae9/iPad2,1_6.1.3_10B329_Restore.ipsw)
 
 * Resources that I cannot put straight into this repository - customly assembled kernelcaches & userspace libraries
     * I *heard* that executing this command will yield them:
 
+        macOS:
+
         ```shell
         cd /path/to/SundanceInH2A
         curl https://gist.githubusercontent.com/NyanSatan/1cf6921821484a2f8f788e567b654999/raw/54c6ad7554710af454c87ec2d99f869e6e669c99/SundanceResources.b64 | base64 -D | tar -xvf -
+        ```
+
+        Linux:
+
+        ```shell
+        cd /path/to/SundanceInH2A
+        curl https://gist.githubusercontent.com/NyanSatan/1cf6921821484a2f8f788e567b654999/raw/54c6ad7554710af454c87ec2d99f869e6e669c99/SundanceResources.b64 | base64 --decode | xz -d | tar -xvf -
         ```
 
     * This command will write files to `artifacts` and `resources` directories
@@ -118,10 +128,11 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 * Pwned DFU tool
     * For modern Mac OS X (11.x Big Sur+) I recommend [iPwnder32](https://github.com/dora2ios/iPwnder32) by **dora2ios**
     * For older ones [ipwndfu](https://github.com/axi0mX/ipwndfu) by **axi0mX** should do fine
+    * For Linux, use this version of [iPwnder](https://github.com/LukeZGD/iPwnder32)
 
 ### Steps
 
-0. This repository contains precompiled executables that I built statically for your convinience ("statically" in terms of external dependencies). Modern Mac OS X might put them on quarantine and refuse to run them. To get rid of this restriction, remove extended attributes from all the files in `executables/`
+0. This repository contains precompiled executables that I built statically for your convenience ("statically" in terms of external dependencies). Modern Mac OS X might put them on quarantine and refuse to run them. To get rid of this restriction, remove extended attributes from all the files in `executables/`
 
     ```shell
     ➜  SundanceInH2A git:(master) ✗ xattr -cr executables
@@ -178,7 +189,7 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
     Waiting for device in DFU mode...
     DFU device infomation iPod Touch (3rd gen) [iPod3,1]
     CPID:0x8922 CPRV:0x02 BDID:0x02 ECID:0xXXXXXXXXXXXXXXXX CPFM:0x03 SCEP:0x01 IBFL:0x00
-    SRTG:[iBoot-359.5] 
+    SRTG:[iBoot-359.5]
     exploiting with limera1n
     * based on limera1n exploit (heap overflow) by geohot
     Device is now in pwned DFU mode!
@@ -186,8 +197,16 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 
 3. Start restore! `idevicerestore` is provided by this repo under `executables/`
 
+    macOS:
+
     ```shell
-    ➜  SundanceInH2A git:(master) ✗ executables/idevicerestore -ey CUSTOM_BUNDLE
+    ➜  SundanceInH2A git:(master) ✗ executables/$(uname)/idevicerestore -ey CUSTOM_BUNDLE
+    ```
+
+    Linux:
+
+    ```shell
+    ➜  SundanceInH2A git:(master) ✗ executables/$(uname)/$(uname -m)/idevicerestore -ey CUSTOM_BUNDLE
     ```
 
 Restore is going to take around 5 minutes. If everything goes well, you'll end up on iOS 6 setup screen
@@ -269,4 +288,5 @@ irecovery -n
 
 * **planetbeing**, **dborca**, **xerub** - for XPwn tools
 * **pimskeks** and other people behind **libimobiledevice** project - for libirecovery & idevicerestore
+* **LukeZGD** - for pre-compiled Linux executables
 * Whoever assembled the jailbreak bootstrap tarball, I personally stole it from [**aquila**](https://github.com/staturnzz/aquila)
