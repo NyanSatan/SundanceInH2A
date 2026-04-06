@@ -116,12 +116,12 @@ class DTNode:
 
         return res
 
-    def iterate(self, callback, depth: int = 0):
-        if not callback(self, depth):
+    def iterate(self, callback, depth: int = 0, path_so_far: list = []):
+        if not callback(self, depth, path_so_far + [self.name]):
             return
 
         for child in self.children:
-            child.iterate(callback, depth + 1)    
+            child.iterate(callback, depth + 1, path_so_far + [self.name])
 
         return True
 
@@ -129,19 +129,15 @@ class DTNode:
         found = None
         tokens = path.split("/")
 
-        def cb(node: DTNode, depth: int):
+        def cb(node: DTNode, depth: int, path_so_far: list):
             nonlocal found, tokens
 
             if found:
                 return False
 
-            if depth == len(tokens):
+            if path_so_far == tokens:
+                found = node
                 return False
-
-            if node.name == tokens[depth]:
-                if depth == len(tokens) - 1:
-                    found = node
-                    return False
 
             return True
 
@@ -171,7 +167,7 @@ def do_diff(args):
     path_nodes = list()
     prev_depth = -1
 
-    def cb(node: DTNode, depth: int):
+    def cb(node: DTNode, depth: int, path_so_far: list):
         nonlocal prev_depth
 
         for _ in range(prev_depth - depth + 1):
