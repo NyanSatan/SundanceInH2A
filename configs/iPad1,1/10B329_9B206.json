@@ -111,6 +111,16 @@
                                 "patch": "00 BF 00 BF 00 BF 00 BF 00 BF 00 BF 00 BF 0C 20"
                             }
                         ]
+                    },
+                    {
+                        "path": "/System/Library/PrivateFrameworks/IAP.framework/Support/iapd",
+                        "patches": [
+                            {
+                                "name": "K48 as K93",
+                                "offset": "0xE68AC",
+                                "patch": "AC F4 F0 5F 1A 7F 41 4E 89 D3 9F C8 61 AF 79 7A 6C E4 82 1B"
+                            }
+                        ]
                     }
                 ],
                 "copy_embedded_files": [
