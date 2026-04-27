@@ -15,6 +15,11 @@ This repository contains tools and instructions to *convert* original iOS 6 firm
 ## Changelog
 <details>
 
+### rev5
+* Merged `reliability-and-debug` branch fixes and improvements (more info [here](https://github.com/NyanSatan/SundanceInH2A/issues/11#issuecomment-4263656612))
+
+* Fixed iPad Camera Connection Kit compatibility
+
 ### rev4b
 * Added Linux executables (thanks to LukeZGD!)
 
@@ -274,15 +279,20 @@ irecovery -n
 
 ## Known issues
 
+* Audio problems
+    * Built-in speaker seems to be less loud compared to iOS 5
+
+    * Microphones do not work
+
+    * Apps with complex audio processing (e.g. GarageBand) might not work
+
+    * Bluetooth audio devices cannot actually play
+        * Wired headphones work fine
+
+    * Probably related to missing hardware-specific plists in `MediaToolbox` framework and `VirtualAudio` bundle (it's a [mess](https://github.com/NyanSatan/SundanceInH2A/issues/14#issuecomment-4032258285))
+
 * Sometimes, Wi-Fi reconnects every minute or so
     * Might be related to my router
-
-* Built-in speaker seems to be less loud compared to iOS 5
-    * Headphones work fine
-    * Probably related to missing hardware-specific plists in `MediaToolbox` framework
-
-* Bluetooth audio devices cannot actually play
-    * Seems to be related to `VirtualAudio` bundle, and it's a mess
 
 ## Credits
 
